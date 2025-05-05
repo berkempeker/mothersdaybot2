@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+import { NextApiRequest, NextApiResponse } from 'next';
 import OpenAI from 'openai';
 
 // Define the structure of the incoming request
@@ -95,7 +95,7 @@ function getCorsHeaders(origin: string) {
     // Check if the origin is in our allowed list
     const isAllowedOrigin = ALLOWED_ORIGINS.includes(origin);
     
-    // Use the actual origin if it's allowed, otherwise use the first allowed origin as fallback
+    // Use the actual origin if it's allowed, otherwise use empty string
     const allowOrigin = isAllowedOrigin ? origin : '';
     
     return {
@@ -106,74 +106,44 @@ function getCorsHeaders(origin: string) {
     };
 }
 
-// CORS Handling for Preflight Requests
-export async function OPTIONS(req: Request) {
-    const origin = req.headers.get('origin') || '';
+// Default export handler function for Next.js Pages API
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+    const origin = req.headers.origin || '';
     
-    // If origin isn't in allowed list, return 204 with restricted CORS headers
-    if (!ALLOWED_ORIGINS.includes(origin)) {
-        return new NextResponse(null, {
-            status: 204,
-            headers: getCorsHeaders(origin),
-        });
-    }
-    
-    // For allowed origins, return 200 with proper CORS headers
-    return new NextResponse(null, {
-        status: 200,
-        headers: getCorsHeaders(origin),
+    // Set CORS headers for all responses
+    Object.entries(getCorsHeaders(origin)).forEach(([key, value]) => {
+        res.setHeader(key, value);
     });
-}
-
-// Main API route handler
-export async function POST(req: Request) {
-    const origin = req.headers.get('origin') || '';
     
-    // If origin isn't allowed, return 403
-    if (!ALLOWED_ORIGINS.includes(origin)) {
-        return NextResponse.json(
-            { error: 'Origin not allowed' },
-            {
-                status: 403,
-                headers: getCorsHeaders(origin),
-            }
-        );
+    // Handle preflight OPTIONS request
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
     }
-
-    try {
-        const data = await req.json();
-
-        if (!validateInput(data)) {
-            return NextResponse.json(
-                { error: 'Invalid input data' },
-                {
-                    status: 400,
-                    headers: getCorsHeaders(origin),
-                }
-            );
+    
+    // Handle POST request
+    if (req.method === 'POST') {
+        // Check if origin is allowed
+        if (!ALLOWED_ORIGINS.includes(origin)) {
+            return res.status(403).json({ error: 'Origin not allowed' });
         }
-
-        const giftIdea = await generateGiftIdea(data);
-
-        return NextResponse.json(
-            { giftIdea },
-            {
-                status: 200,
-                headers: getCorsHeaders(origin),
+        
+        try {
+            if (!validateInput(req.body)) {
+                return res.status(400).json({ error: 'Invalid input data' });
             }
-        );
-
-    } catch (error) {
-        console.error('API Error:', error);
-        return NextResponse.json(
-            {
+            
+            const giftIdea = await generateGiftIdea(req.body);
+            return res.status(200).json({ giftIdea });
+            
+        } catch (error) {
+            console.error('API Error:', error);
+            return res.status(500).json({
                 error: 'Request processing failed',
                 details: error instanceof Error ? error.message : 'Unknown error',
-            },
-            {
-                status: 500,
-                headers: getCorsHeaders(origin),
-            }
-        );
+            });
+        }
     }
+    
+    // Handle unsupported methods
+    return res.status(405).json({ error: 'Method not allowed' });
 }
