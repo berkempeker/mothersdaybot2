@@ -75,14 +75,13 @@ async function generateGiftIdea(data: BotInput): Promise<string> {
                     6. If ${data.funOrSent} is "Fun", suggest a lighthearted or playful gift. If not, suggest a heartfelt or sentimental one.
                     7. Avoid overly generic gifts unless they are presented with a unique twist or heartfelt personalization.
                     8. End the suggestion with a gentle and warm sentence that makes the giver feel confident and inspired.`
-
                 }
             ],
             temperature: 0.7,
         });
 
         const giftIdea = response.choices[0].message.content;
-        if (!giftIdea) throw new Error("Oh no! We couldn’t find the perfect gift this time—but your love already says so much. Want to give it another shot?");
+        if (!giftIdea) throw new Error("Oh no! We couldn't find the perfect gift this time—but your love already says so much. Want to give it another shot?");
 
         return giftIdea;
     } catch (error) {
@@ -91,37 +90,57 @@ async function generateGiftIdea(data: BotInput): Promise<string> {
     }
 }
 
+// CORS headers helper function
+function getCorsHeaders(origin: string) {
+    // Check if the origin is in our allowed list
+    const isAllowedOrigin = ALLOWED_ORIGINS.includes(origin);
+    
+    // Use the actual origin if it's allowed, otherwise use the first allowed origin as fallback
+    const allowOrigin = isAllowedOrigin ? origin : '';
+    
+    return {
+        'Access-Control-Allow-Origin': allowOrigin,
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Max-Age': '86400', // 24 hours cache for preflight requests
+    };
+}
+
 // CORS Handling for Preflight Requests
 export async function OPTIONS(req: Request) {
     const origin = req.headers.get('origin') || '';
-    const allowOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
-
+    
+    // If origin isn't in allowed list, return 204 with restricted CORS headers
+    if (!ALLOWED_ORIGINS.includes(origin)) {
+        return new NextResponse(null, {
+            status: 204,
+            headers: getCorsHeaders(origin),
+        });
+    }
+    
+    // For allowed origins, return 200 with proper CORS headers
     return new NextResponse(null, {
         status: 200,
-        headers: {
-            'Access-Control-Allow-Origin': allowOrigin,
-            'Access-Control-Allow-Methods': 'POST, OPTIONS',
-            'Access-Control-Allow-Headers': 'Content-Type',
-        },
+        headers: getCorsHeaders(origin),
     });
 }
 
 // Main API route handler
 export async function POST(req: Request) {
     const origin = req.headers.get('origin') || '';
-    const allowOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+    
+    // If origin isn't allowed, return 403
+    if (!ALLOWED_ORIGINS.includes(origin)) {
+        return NextResponse.json(
+            { error: 'Origin not allowed' },
+            {
+                status: 403,
+                headers: getCorsHeaders(origin),
+            }
+        );
+    }
 
     try {
-        if (!ALLOWED_ORIGINS.includes(origin)) {
-            return NextResponse.json(
-                { error: 'CORS: Origin not allowed' },
-                {
-                    status: 403,
-                    headers: { 'Access-Control-Allow-Origin': allowOrigin },
-                }
-            );
-        }
-
         const data = await req.json();
 
         if (!validateInput(data)) {
@@ -129,7 +148,7 @@ export async function POST(req: Request) {
                 { error: 'Invalid input data' },
                 {
                     status: 400,
-                    headers: { 'Access-Control-Allow-Origin': allowOrigin }
+                    headers: getCorsHeaders(origin),
                 }
             );
         }
@@ -140,7 +159,7 @@ export async function POST(req: Request) {
             { giftIdea },
             {
                 status: 200,
-                headers: { 'Access-Control-Allow-Origin': allowOrigin },
+                headers: getCorsHeaders(origin),
             }
         );
 
@@ -153,7 +172,7 @@ export async function POST(req: Request) {
             },
             {
                 status: 500,
-                headers: { 'Access-Control-Allow-Origin': allowOrigin },
+                headers: getCorsHeaders(origin),
             }
         );
     }
